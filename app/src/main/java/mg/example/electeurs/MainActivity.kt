@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+                Surface(modifier = Modifier.fillMaxSize()) {
                     AppNavigation()
                 }
             }
@@ -55,11 +56,15 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val viewModel: ElecteursViewModel = viewModel()
 
-    NavHost(navController = navController, startDestination = "liste") {
+    NavHost(
+        navController = navController,
+        startDestination = "liste",
+        modifier = modifier,
+    ) {
         composable("liste") {
             EcranListe(
                 viewModel = viewModel,
@@ -91,6 +96,7 @@ fun EcranListe(
     viewModel: ElecteursViewModel,
     onAjouterClick: () -> Unit,
     onVoterClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val voters by viewModel.voters.collectAsState()
     val recherche by viewModel.recherche.collectAsState()
@@ -98,7 +104,11 @@ fun EcranListe(
     val filtreDistrict by viewModel.filtreDistrict.collectAsState()
     val filtreSexe by viewModel.filtreSexe.collectAsState()
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+    ) {
         Text("Digitalisation des électeurs (Room)", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
 
@@ -224,18 +234,21 @@ fun DropdownFiltre(
 fun EcranAjout(
     viewModel: ElecteursViewModel,
     onTermine: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var cin by remember { mutableStateOf("") }
-    var nom by remember { mutableStateOf("") }
-    var naissance by remember { mutableStateOf("") }
-    var sexe by remember { mutableStateOf("") }
-    var region by remember { mutableStateOf("") }
-    var district by remember { mutableStateOf("") }
-    var fokontany by remember { mutableStateOf("") }
-    var erreur by remember { mutableStateOf<String?>(null) }
+    // rememberSaveable : ces champs survivent maintenant à la rotation de l'écran
+    // et aux recréations de l'Activity (contrairement à remember seul).
+    var cin by rememberSaveable { mutableStateOf("") }
+    var nom by rememberSaveable { mutableStateOf("") }
+    var naissance by rememberSaveable { mutableStateOf("") }
+    var sexe by rememberSaveable { mutableStateOf("") }
+    var region by rememberSaveable { mutableStateOf("") }
+    var district by rememberSaveable { mutableStateOf("") }
+    var fokontany by rememberSaveable { mutableStateOf("") }
+    var erreur by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
-        Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(20.dp)
             .verticalScroll(rememberScrollState()),
@@ -329,6 +342,7 @@ fun EcranDetail(
     viewModel: ElecteursViewModel,
     voterId: Long,
     onRetour: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var etat by remember { mutableStateOf(EtatDetail()) }
     var confirmationSuppression by remember { mutableStateOf(false) }
@@ -338,7 +352,11 @@ fun EcranDetail(
         etat = EtatDetail(voter = voter, chargement = false)
     }
 
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp),
+    ) {
         Text("Fiche électeur", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(16.dp))
 
