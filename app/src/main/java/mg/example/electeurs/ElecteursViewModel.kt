@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class EtatDetail(
-    val voter: Voter? = null,
+    val electeur: Electeur? = null,
     val chargement: Boolean = true,
 )
 
@@ -28,7 +28,7 @@ data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourt
 
 class ElecteursViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val dao = ElecteurDatabase.obtenir(application).voterDao()
+    private val dao = ElecteurDatabase.obtenir(application).electeurDao()
 
     // États des filtres
     private val _recherche = MutableStateFlow("")
@@ -64,7 +64,7 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val voters: StateFlow<List<Voter>> = combine(
+    val electeurs: StateFlow<List<Electeur>> = combine(
         _recherche,
         _filtreRegion,
         _filtreDistrict,
@@ -116,16 +116,21 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun ajouterElecteur(
         voterId: String,
+        cin: String,
         name: String,
         birthDate: String,
         gender: String,
         region: String,
         district: String,
         fokontany: String,
+        bureauVote: String,
         onResult: (succes: Boolean, erreur: String?) -> Unit,
     ) {
         val idNettoye = voterId.trim()
         val nomNettoye = name.trim()
+        // On nettoie le CIN (enlève espaces éventuels saisis par l'utilisateur)
+        val cinNettoye = cin.filter { it.isDigit() }
+        val bureauNettoye = bureauVote.trim()
 
         if (idNettoye.isEmpty()) {
             onResult(false, "L'identifiant est obligatoire")
@@ -135,25 +140,38 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
             onResult(false, "Le nom est obligatoire")
             return
         }
+        if (cinNettoye.length != 12) {
+            onResult(false, "Le CIN doit contenir exactement 12 chiffres")
+            return
+        }
+        if (bureauNettoye.isEmpty()) {
+            onResult(false, "Le bureau de vote est obligatoire")
+            return
+        }
 
         viewModelScope.launch {
-            val existeDeja = dao.voterIdExiste(idNettoye)
-            if (existeDeja) {
+            if (dao.voterIdExiste(idNettoye)) {
                 onResult(false, "Un électeur possède déjà cet identifiant")
                 return@launch
             }
+            if (dao.cinExiste(cinNettoye)) {
+                onResult(false, "Un électeur possède déjà ce CIN")
+                return@launch
+            }
 
-            val voter = Voter(
+            val electeur = Electeur(
                 voterId = idNettoye,
+                cin = cinNettoye,
                 name = nomNettoye,
                 birthDate = birthDate.trim(),
                 gender = gender.trim(),
                 region = region.trim(),
                 district = district.trim(),
                 fokontany = fokontany.trim(),
+                bureauVote = bureauNettoye,
             )
 
-            val resultat = dao.inserer(voter)
+            val resultat = dao.inserer(electeur)
             if (resultat != -1L) {
                 rafraichirListesFiltres()
                 onResult(true, null)
@@ -163,7 +181,7 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    suspend fun chargerElecteur(id: Long): Voter? =
+    suspend fun chargerElecteur(id: Long): Electeur? =
         withContext(Dispatchers.IO) { dao.parId(id) }
 
     fun supprimerElecteur(id: Long, apresSuppression: () -> Unit) {
