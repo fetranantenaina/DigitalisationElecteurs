@@ -33,44 +33,35 @@ data class Electeur(
 // Helpers : codes postaux par région + génération / formatage du CIN
 // ---------------------------------------------------------------------------
 
-/** Table de correspondance région → code postal (préfixe du CIN). */
-fun codePostalDeRegion(region: String): String = when (region.trim().lowercase()) {
-    "analamanga"          -> "101"
-    "vakinankaratra"      -> "110"
-    "itasy"               -> "112"
-    "bongolava"           -> "113"
-    "haute matsiatra"     -> "301"
-    "amoron'i mania"      -> "306"
-    "vatovavy"            -> "311"
-    "fitovinany"          -> "313"
-    "ihorombe"            -> "315"
-    "atsimo-atsinanana"   -> "317"
-    "atsinanana"          -> "501"
-    "analanjirofo"        -> "502"
-    "alaotra-mangoro"     -> "503"
-    "boeny"               -> "401"
-    "sofia"               -> "402"
-    "melaky"              -> "403"
-    "diana"               -> "202"
-    "sava"                -> "201"
-    "menabe"              -> "601"
-    "atsimo-andrefana"    -> "602"
-    "androy"              -> "603"
-    "anosy"               -> "604"
-    else                  -> "000" // fallback si région inconnue
-}
+fun codePostalDeRegion(region: String): String =
+    REGIONS_MADAGASCAR
+        .firstOrNull { it.nom.equals(region.trim(), ignoreCase = true) }
+        ?.codePostal
+        ?: "000"
 
-/** Formate un CIN de 12 chiffres en groupes de 3 : "101 234 567 890". */
 fun formaterCin(cin: String): String {
     val brut = cin.filter { it.isDigit() }
     return brut.chunked(3).joinToString(" ")
 }
 
-/** Génère un CIN de 12 chiffres : préfixe = code postal région + 9 chiffres aléatoires. */
 fun genererCin(region: String, aleatoire: kotlin.random.Random = kotlin.random.Random.Default): String {
     val prefixe = codePostalDeRegion(region).padStart(3, '0')
     val suite = (1..9).joinToString("") { aleatoire.nextInt(0, 10).toString() }
     return prefixe + suite
+}
+
+// ---------------------------------------------------------------------------
+// Codes de tri (utilisés dans le ORDER BY dynamique du DAO)
+// ---------------------------------------------------------------------------
+
+/** Définit les critères de tri disponibles pour la liste des électeurs. */
+enum class TriElecteur(val code: Int, val libelle: String) {
+    NOM_ASC(1, "Nom (A → Z)"),
+    NOM_DESC(2, "Nom (Z → A)"),
+    CIN_ASC(3, "CIN (croissant)"),
+    CIN_DESC(4, "CIN (décroissant)"),
+    ID_ASC(5, "ID (croissant)"),
+    ID_DESC(6, "ID (décroissant)"),
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +75,14 @@ interface ElecteurDao {
     @Query("SELECT * FROM electeurs ORDER BY name ASC")
     fun tousLesElecteurs(): Flow<List<Electeur>>
 
-    /** Recherche multi-critères combinant texte libre, région, district et sexe. */
+    /**
+     * Recherche multi-critères + tri dynamique.
+     *
+     * Le paramètre [tri] est un code (voir [TriElecteur]) qui pilote la clause
+     * ORDER BY via des CASE. On ne peut pas binder un nom de colonne en SQL,
+     * donc on utilise cette technique : chaque CASE retourne une valeur
+     * comparable, et on trie dessus.
+     */
     @Query("""
         SELECT * FROM electeurs 
         WHERE (:text = '' OR voterId LIKE '%' || :text || '%' 
@@ -97,13 +95,21 @@ interface ElecteurDao {
           AND (:region IS NULL OR :region = '' OR region = :region)
           AND (:district IS NULL OR :district = '' OR district = :district)
           AND (:gender IS NULL OR :gender = '' OR gender = :gender)
-        ORDER BY name ASC
+        ORDER BY
+          CASE WHEN :tri = 1 THEN name END ASC,
+          CASE WHEN :tri = 2 THEN name END DESC,
+          CASE WHEN :tri = 3 THEN cin END ASC,
+          CASE WHEN :tri = 4 THEN cin END DESC,
+          CASE WHEN :tri = 5 THEN id END ASC,
+          CASE WHEN :tri = 6 THEN id END DESC,
+          name ASC
     """)
     fun filtrerElecteurs(
         text: String,
         region: String?,
         district: String?,
-        gender: String?
+        gender: String?,
+        tri: Int
     ): Flow<List<Electeur>>
 
     /** Récupérer la liste distincte des régions pour alimenter les listes de sélection. */

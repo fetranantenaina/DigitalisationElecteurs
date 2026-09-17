@@ -23,8 +23,14 @@ data class EtatDetail(
     val chargement: Boolean = true,
 )
 
-// Classe utilitaire pour combiner 4 flows dans le ViewModel
-data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+// Classe utilitaire pour combiner 5 flows dans le ViewModel
+data class Quint<A, B, C, D, E>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D,
+    val fifth: E,
+)
 
 class ElecteursViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -42,6 +48,10 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _filtreSexe = MutableStateFlow<String?>(null)
     val filtreSexe: StateFlow<String?> = _filtreSexe.asStateFlow()
+
+    // État du tri (NOM_ASC par défaut)
+    private val _tri = MutableStateFlow(TriElecteur.NOM_ASC)
+    val tri: StateFlow<TriElecteur> = _tri.asStateFlow()
 
     // Listes de choix disponibles pour les menus déroulants
     var listRegions by mutableStateOf<List<String>>(emptyList())
@@ -68,15 +78,17 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
         _recherche,
         _filtreRegion,
         _filtreDistrict,
-        _filtreSexe
-    ) { texte, region, district, sexe ->
-        Quad(texte, region, district, sexe)
-    }.flatMapLatest { (texte, region, district, sexe) ->
+        _filtreSexe,
+        _tri,
+    ) { texte, region, district, sexe, tri ->
+        Quint(texte, region, district, sexe, tri)
+    }.flatMapLatest { (texte, region, district, sexe, tri) ->
         dao.filtrerElecteurs(
             text = texte.trim(),
             region = region,
             district = district,
-            gender = sexe
+            gender = sexe,
+            tri = tri.code,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -104,11 +116,16 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
         _filtreSexe.value = sexe
     }
 
+    fun changerTri(nouveauTri: TriElecteur) {
+        _tri.value = nouveauTri
+    }
+
     fun reinitialiserFiltres() {
         _recherche.value = ""
         _filtreRegion.value = null
         _filtreDistrict.value = null
         _filtreSexe.value = null
+        _tri.value = TriElecteur.NOM_ASC
         viewModelScope.launch {
             listDistricts = dao.obtenirDistricts(null)
         }
@@ -128,7 +145,6 @@ class ElecteursViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         val idNettoye = voterId.trim()
         val nomNettoye = name.trim()
-        // On nettoie le CIN (enlève espaces éventuels saisis par l'utilisateur)
         val cinNettoye = cin.filter { it.isDigit() }
         val bureauNettoye = bureauVote.trim()
 
